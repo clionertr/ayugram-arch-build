@@ -29,13 +29,15 @@ jobs:
 
       - name: Install build dependencies (from PKGBUILD)
         run: |
-          sudo -u builder bash -lc "
+          sudo -u builder bash -lc '
             cd ~/ayugram-desktop
-            # 先只解析依赖列表，不编译
             source PKGBUILD
-            # 安装 makedepends 和 depends，忽略本地已经装好的
-            sudo pacman -S --noconfirm --needed ${makedepends[@]} ${depends[@]}
-          "
+            pkgs=("${makedepends[@]}" "${depends[@]}")
+            if [ "${#pkgs[@]}" -ne 0 ]; then
+              sudo pacman -S --noconfirm --needed "${pkgs[@]}"
+            fi
+          '
+
 
       - name: Build package with makepkg
         run: |

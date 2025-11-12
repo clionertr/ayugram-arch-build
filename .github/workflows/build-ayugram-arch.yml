@@ -1,0 +1,55 @@
+name: Build ayugram-desktop Arch package
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # 在 GitHub Ubuntu runner 里用 Arch Linux 容器
+    container:
+      image: archlinux:base-devel
+
+    steps:
+      - name: Install basic tools
+        run: |
+          pacman -Syu --noconfirm git sudo
+
+          # 创建一个普通用户来构建（makepkg 不推荐用 root）
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Clone ayugram-desktop AUR PKGBUILD
+        run: |
+          sudo -u builder bash -lc "
+            cd ~
+            git clone https://aur.archlinux.org/ayugram-desktop.git
+          "
+
+      - name: Install build dependencies (from PKGBUILD)
+        run: |
+          sudo -u builder bash -lc "
+            cd ~/ayugram-desktop
+            # 先只解析依赖列表，不编译
+            source PKGBUILD
+            # 安装 makedepends 和 depends，忽略本地已经装好的
+            sudo pacman -S --noconfirm --needed ${makedepends[@]} ${depends[@]}
+          "
+
+      - name: Build package with makepkg
+        run: |
+          sudo -u builder bash -lc "
+            cd ~/ayugram-desktop
+            # 减低内存压力：单线程，不用 LTO
+            export MAKEFLAGS='-j1'
+            export CFLAGS='-O2 -pipe -fno-lto'
+            export CXXFLAGS='-O2 -pipe -fno-lto'
+            makepkg -s --noconfirm
+          "
+
+      - name: Upload built packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ayugram-packages
+          path: /home/builder/ayugram-desktop/*.pkg.tar.zst

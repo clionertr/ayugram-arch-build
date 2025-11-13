@@ -8,30 +8,27 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    # 在官方 Ubuntu runner 里跑 Arch Linux 容器
+    # 在 Ubuntu runner 里跑 Arch Linux 容器
     container:
       image: archlinux:base-devel
 
-    # 用 bash，写脚本方便一点
     defaults:
       run:
         shell: bash
 
     steps:
-      # 0. 初始化：装基础工具 + clang/lld + ccache + builder 用户
+      # 0. 初始化：安装工具 + 创建 builder 用户
       - name: Setup Arch container
         run: |
           pacman -Syu --noconfirm git sudo clang lld ccache
 
-          # 创建普通用户，避免用 root 跑 makepkg
           useradd -m builder
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-          # 简单配置一下 ccache
           mkdir -p /home/builder/.cache/ccache
           chown -R builder:builder /home/builder
 
-      # 1. 恢复 ccache（只针对“源文件已经编过”的情况加速）
+      # 1. 恢复 ccache（成功构建过一次之后才会真正生效）
       - name: Restore ccache
         uses: actions/cache@v4
         with:
@@ -41,7 +38,7 @@ jobs:
             ccache-${{ runner.os }}-${{ github.ref_name }}-
             ccache-${{ runner.os }}-
 
-      # 2. clone 或更新 AUR PKGBUILD 仓库
+      # 2. clone / 更新 AUR 仓库
       - name: Clone or update ayugram-desktop AUR repo
         run: |
           sudo -u builder bash <<'EOF'
@@ -57,14 +54,14 @@ jobs:
           fi
           EOF
 
-      # 3. 用 clang + lld + ccache + 单线程 编译
+      # 3. 用 clang + lld + ccache 编译，并“屏蔽” ABSL_ATTRIBUTE_LIFETIME_BOUND
       - name: Build package with makepkg
         run: |
           sudo -u builder bash <<'EOF'
           set -e
           cd "$HOME/ayugram-desktop"
 
-          # 使用 clang/clang++，避免 binutils as 的那个断言 bug
+          # 用 clang 避开 binutils as 的崩溃
           export CC=clang
           export CXX=clang++
           export LDFLAGS="$LDFLAGS -fuse-ld=lld"
@@ -73,21 +70,21 @@ jobs:
           export CCACHE_DIR="$HOME/.cache/ccache"
           export PATH="/usr/lib/ccache/bin:$PATH"
 
+          # 降内存占用
           export MAKEFLAGS="-j1"
+
+          # 关键：把 ABSL_ATTRIBUTE_LIFETIME_BOUND 宏定义成“空”
           export CFLAGS="-O2 -pipe -fno-lto -DABSL_ATTRIBUTE_LIFETIME_BOUND="
           export CXXFLAGS="-O2 -pipe -fno-lto -DABSL_ATTRIBUTE_LIFETIME_BOUND="
 
-
-          # -s 自动装依赖，--noconfirm 不交互
-          # 不加 -e 的话第一次会完整解压构建；你以后可以改成 -e 复用 src/
+          # -s 自动装依赖，--noconfirm 避免交互
           makepkg -s --noconfirm
           EOF
 
-      # 4. 上传生成的 pkg.tar.zst 包
+      # 4. 上传生成的包
       - name: Upload built packages
         uses: actions/upload-artifact@v4
         with:
           name: ayugram-packages
           path: /home/builder/ayugram-desktop/*.pkg.tar.zst
-          # 比如保留 7 天（可按需调整）
           retention-days: 7

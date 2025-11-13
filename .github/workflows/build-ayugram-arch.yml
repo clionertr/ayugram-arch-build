@@ -73,10 +73,10 @@ jobs:
           export CCACHE_DIR="$HOME/.cache/ccache"
           export PATH="/usr/lib/ccache/bin:$PATH"
 
-          # 降低资源占用
           export MAKEFLAGS="-j1"
-          export CFLAGS="-O2 -pipe -fno-lto"
-          export CXXFLAGS="-O2 -pipe -fno-lto"
+          export CFLAGS="-O2 -pipe -fno-lto -DABSL_ATTRIBUTE_LIFETIME_BOUND="
+          export CXXFLAGS="-O2 -pipe -fno-lto -DABSL_ATTRIBUTE_LIFETIME_BOUND="
+
 
           # -s 自动装依赖，--noconfirm 不交互
           # 不加 -e 的话第一次会完整解压构建；你以后可以改成 -e 复用 src/

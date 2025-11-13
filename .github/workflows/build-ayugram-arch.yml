@@ -39,16 +39,31 @@ jobs:
           '
 
 
-      - name: Build package with makepkg
+      - name: Enable ccache
         run: |
-          sudo -u builder bash -lc "
+          pacman -S --noconfirm ccache
+          echo 'max_size = 5.0G' > /etc/ccache.conf
+          echo 'cache_dir = /home/builder/.cache/ccache' >> /etc/ccache.conf
+      
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: /home/builder/.cache/ccache
+          key: ccache-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
+      
+      # 编译步骤里加环境变量
+      - name: Build with makepkg
+        run: |
+          sudo -u builder bash -lc '
+            export CC="clang" CXX="clang++"
+            export CCACHE_DIR="$HOME/.cache/ccache"
+            export PATH="/usr/lib/ccache/bin:$PATH"
             cd ~/ayugram-desktop
-            # 减低内存压力：单线程，不用 LTO
-            export MAKEFLAGS='-j1'
-            export CFLAGS='-O2 -pipe -fno-lto'
-            export CXXFLAGS='-O2 -pipe -fno-lto'
-            makepkg -s --noconfirm
-          "
+            MAKEFLAGS="-j1" CFLAGS="-O2 -pipe -fno-lto" CXXFLAGS="-O2 -pipe -fno-lto" makepkg -e -s --noconfirm
+          '
+
 
       - name: Upload built packages
         uses: actions/upload-artifact@v4
